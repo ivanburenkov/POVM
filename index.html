@@ -28,6 +28,7 @@
             <hr>
             <label>Min α: <input type="number" id="min-a" value="0.1"></label><br>
             <label>Max α: <input type="number" id="max-a" value="4.0"></label><br>
+            <label>Number of α: <input type="number" id="num-a" value="10" step="1"></label><br>
             <label>Trials: <input type="number" id="trials" value="10000"></label><br>
             <button id="btn-sim" disabled>2. Simulate Experiment</button>
             <hr>
@@ -139,8 +140,9 @@
         document.getElementById('btn-sim').onclick = () => {
             const minA = parseFloat(document.getElementById('min-a').value);
             const maxA = parseFloat(document.getElementById('max-a').value);
+            const numA = parseFloat(document.getElementById('num-a').value);
             const alphas = [];
-            for(let a=minA; a<=maxA; a+=0.25) alphas.push(a);
+            for(let a=minA; a<=maxA; a+=(maxA-minA)/numA) alphas.push(a);
 
             worker.postMessage({
                 type: 'sim',
