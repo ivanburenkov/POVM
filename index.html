@@ -39,11 +39,23 @@
     </div>
 
     <script id="worker-code" type="javascript/worker">
+        // 1. Get the current page's base URL dynamically
         const basePath = self.location.origin;// + self.location.pathname.substring(0, self.location.pathname.lastIndexOf('/'));
-        importScripts(basePath + '/POVM/simulator.js');
+        
+        // 2. Import the script using the fully-qualified URL
+        importScripts(basePath + '/POVM/simulator.js'); 
 
         let wasm;
-        createSimulator().then(instance => {
+        
+        // 3. Initialize the simulator and use locateFile to resolve the .wasm path
+        createSimulator({
+            locateFile: (path) => {
+                if (path.endsWith('.wasm')) {
+                    return basePath + '/POVM/' + path;
+                }
+                return path;
+            }
+        }).then(instance => {
             wasm = instance;
             self.postMessage({type: 'ready'});
         });
