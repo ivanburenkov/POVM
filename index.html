@@ -180,17 +180,23 @@
             const mc = lastParams.maxC;
             const alphas = window.latestSimAlphas;
             const counts = window.latestSimCounts;
+            const numA = alphas.length;
 
-            let tsv = 'alpha';
-            for (let c = 0; c <= mc; c++) tsv += `\tc=${c}`;
-            tsv += '\n';
+            // Header formulation
+            let tsv = `${mc}\n${numA}\n`;
 
-            for (let i = 0; i < alphas.length; i++) {
-                tsv += alphas[i];
+            // Write alphas
+            for (let i = 0; i < numA; i++) {
+                tsv += `${alphas[i]}\n`;
+            }
+
+            // Write counts in a row per alpha
+            for (let i = 0; i < numA; i++) {
+                const row = [];
                 for (let c = 0; c <= mc; c++) {
-                    tsv += `\t${counts[i * (mc + 1) + c]}`;
+                    row.push(counts[i * (mc + 1) + c]);
                 }
-                tsv += '\n';
+                tsv += row.join('\t') + '\n';
             }
 
             downloadFile(tsv, 'simulated_counts.tsv', 'text/tab-separated-values');
