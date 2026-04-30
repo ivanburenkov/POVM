@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>POVM Simulator (WASM)</title>
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background-color: #f4f7f6; }
+        .container { display: flex; gap: 20px; }
+        .sidebar { flex: 1; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .main { flex: 2; display: flex; flex-direction: column; gap: 20px; }
+        .plot { height: 400px; background: white; border-radius: 8px; }
+        .log { height: 100px; background: #222; color: #0f0; padding: 10px; font-family: monospace; overflow-y: auto; font-size: 12px; }
+        button { width: 100%; padding: 10px; margin-top: 10px; font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>POVM Simulator <small>(WASM Engine)</small></h1>
+    <div class="container">
+        <div class="sidebar">
+            <h3>Configuration</h3>
+            <label>Type: <select id="det-type"><option value="0">Ideal</option><option value="1">QPNR</option></select></label><br>
+            <label>Eff (η): <input type="number" id="eff" value="0.9" step="0.1"></label><br>
+            <label>Dark (pd): <input type="number" id="dark" value="0.001" step="0.001"></label><br>
+            <label>Max C: <input type="number" id="max-c" value="5"></label><br>
+            <label>Max N: <input type="number" id="max-n" value="20"></label><br>
+            <button id="btn-gen" class="primary">1. Generate POVM</button>
+            <hr>
+            <label>Min α: <input type="number" id="min-a" value="0.1"></label><br>
+            <label>Max α: <input type="number" id="max-a" value="4.0"></label><br>
+            <label>Trials: <input type="number" id="trials" value="10000"></label><br>
+            <button id="btn-sim" disabled>2. Simulate Experiment</button>
+            <div id="log" class="log">WASM Initializing...</div>
+        </div>
+        <div class="main">
+            <div id="plot-povm" class="plot"></div>
+            <div id="plot-sim" class="plot"></div>
+        </div>
+    </div>
+
+    <script id="worker-code" type="javascript/worker">
+        // 1. Get the current page's base URL dynamically
+        const basePath = self.location.origin;// + self.location.pathname.substring(0, self.location.pathname.lastIndexOf('/'));
+        
+        // 2. Import the script using the fully-qualified URL
+        importScripts(basePath + '/POVM/simulator.js'); 
+
+        let wasm;
+        
+        // 3. Initialize the simulator and use locateFile to resolve the .wasm path
+        createSimulator({
+            locateFile: (path) => {
+                if (path.endsWith('.wasm')) {
+                    return basePath + '/POVM/' + path;
+                }
+                return path;
+            }
+        }).then(instance => {
+            wasm = instance;
+            self.postMessage({type: 'ready'});
+        });
+
+        self.onmessage = function(e) {
+            const d = e.data;
+            if (d.type === 'gen') {
+                const size = (d.maxN + 1) * (d.maxC + 1);
+                const ptr = wasm._allocate_f64(size);
+                
+                wasm._generate_povm(d.det, d.eta, d.pd, d.maxC, d.maxN, ptr);
+                
+                const result = new Float64Array(wasm.HEAPF64.buffer, ptr, size);
+                const povm = Array.from(result);
+                wasm._free_mem(ptr);
+                self.postMessage({type: 'povm_done', povm, maxC: d.maxC, maxN: d.maxN});
+            } else if (d.type === 'sim') {
+                const nA = d.alphas.length;
+                const sizeC = nA * (d.maxC + 1);
+                const sizeP = (d.maxN + 1) * (d.maxC + 1);
+
+                const ptrP = wasm._allocate_f64(sizeP);
+                const ptrA = wasm._allocate_f64(nA);
+                const ptrOut = wasm._allocate_i32(sizeC);
+
+                wasm.HEAPF64.set(new Float64Array(d.povm), ptrP / 8);
+                wasm.HEAPF64.set(new Float64Array(d.alphas), ptrA / 8);
+                wasm.HEAPU32.fill(0, ptrOut / 4, ptrOut / 4 + sizeC);
+
+                wasm._simulate_experiment(ptrP, ptrA, nA, d.trials, d.maxC, d.maxN, ptrOut);
+
+                const counts = Array.from(new Int32Array(wasm.HEAP32.buffer, ptrOut, sizeC));
+                
+                wasm._free_mem(ptrP); wasm._free_mem(ptrA); wasm._free_mem(ptrOut);
+                self.postMessage({type: 'sim_done', counts, alphas: d.alphas});
+            }
+        };
+    </script>
+
+    <script>
+        let worker, currentPovm, lastParams;
+        const log = (m) => { document.getElementById('log').innerText += `\n> ${m}`; };
+
+        const blob = new Blob([document.getElementById('worker-code').textContent], {type: 'text/javascript'});
+        worker = new Worker(URL.createObjectURL(blob));
+
+        worker.onmessage = (e) => {
+            const d = e.data;
+            if (d.type === 'ready') {
+                log("WASM Engine Loaded.");
+            } else if (d.type === 'povm_done') {
+                currentPovm = d.povm;
+                lastParams = { maxC: d.maxC, maxN: d.maxN };
+                plotPovm(d.povm, d.maxC, d.maxN);
+                document.getElementById('btn-sim').disabled = false;
+                log("POVM Matrix calculated.");
+            } else if (d.type === 'sim_done') {
+                plotSim(d.alphas, d.counts, lastParams.maxC);
+                log("Simulation completed in WASM.");
+            }
+        };
+
+        document.getElementById('btn-gen').onclick = () => {
+            worker.postMessage({
+                type: 'gen',
+                det: parseInt(document.getElementById('det-type').value),
+                eta: parseFloat(document.getElementById('eff').value),
+                pd: parseFloat(document.getElementById('dark').value),
+                maxC: parseInt(document.getElementById('max-c').value),
+                maxN: parseInt(document.getElementById('max-n').value)
+            });
+        };
+
+        document.getElementById('btn-sim').onclick = () => {
+            const minA = parseFloat(document.getElementById('min-a').value);
+            const maxA = parseFloat(document.getElementById('max-a').value);
+            const alphas = [];
+            for(let a=minA; a<=maxA; a+=0.25) alphas.push(a);
+
+            worker.postMessage({
+                type: 'sim',
+                povm: currentPovm,
+                alphas: alphas,
+                trials: parseInt(document.getElementById('trials').value),
+                maxC: lastParams.maxC,
+                maxN: lastParams.maxN
+            });
+        };
+
+        function plotPovm(flat, mc, mn) {
+            const z = [];
+            for(let n=0; n<=mn; n++) z.push(flat.slice(n*(mc+1), (n+1)*(mc+1)));
+            Plotly.newPlot('plot-povm', [{z: z, type: 'heatmap'}], {title: 'POVM Matrix (WASM)'});
+        }
+
+        function plotSim(alphas, counts, mc) {
+            const traces = [];
+            for(let c=0; c<=mc; c++) {
+                const y = [];
+                for(let i=0; i<alphas.length; i++) y.push(counts[i*(mc+1)+c]);
+                traces.push({x: alphas, y: y, name: `c=${c}`, mode: 'lines+markers'});
+            }
+            Plotly.newPlot('plot-sim', traces, {title: 'Simulated Counts'});
+        }
+    </script>
+</body>
+</html>
