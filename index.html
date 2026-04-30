@@ -30,6 +30,9 @@
             <label>Max α: <input type="number" id="max-a" value="4.0"></label><br>
             <label>Trials: <input type="number" id="trials" value="10000"></label><br>
             <button id="btn-sim" disabled>2. Simulate Experiment</button>
+            <hr>
+            <button id="btn-export-povm" disabled style="background-color: #17a2b8; color: white;">Export POVM TSV</button>
+            <button id="btn-export-sim" disabled style="background-color: #17a2b8; color: white;">Export Sim Data TSV</button>
             <div id="log" class="log">WASM Initializing...</div>
         </div>
         <div class="main">
@@ -40,7 +43,7 @@
 
     <script id="worker-code" type="javascript/worker">
         // 1. Get the current page's base URL dynamically
-        const basePath = self.location.origin;// + self.location.pathname.substring(0, self.location.pathname.lastIndexOf('/'));
+        const basePath = self.location.origin;
         
         // 2. Import the script using the fully-qualified URL
         importScripts(basePath + '/POVM/simulator.js'); 
@@ -111,9 +114,13 @@
                 lastParams = { maxC: d.maxC, maxN: d.maxN };
                 plotPovm(d.povm, d.maxC, d.maxN);
                 document.getElementById('btn-sim').disabled = false;
+                document.getElementById('btn-export-povm').disabled = false;
                 log("POVM Matrix calculated.");
             } else if (d.type === 'sim_done') {
+                window.latestSimCounts = d.counts;
+                window.latestSimAlphas = d.alphas;
                 plotSim(d.alphas, d.counts, lastParams.maxC);
+                document.getElementById('btn-export-sim').disabled = false;
                 log("Simulation completed in WASM.");
             }
         };
@@ -145,10 +152,74 @@
             });
         };
 
+        // Export data features
+        document.getElementById('btn-export-povm').onclick = () => {
+            if (!currentPovm) return;
+            const mc = lastParams.maxC;
+            const mn = lastParams.maxN;
+            
+            let tsv = 'n';
+            for (let c = 0; c <= mc; c++) tsv += `\tc=${c}`;
+            tsv += '\n';
+
+            for (let n = 0; n <= mn; n++) {
+                tsv += n;
+                for (let c = 0; c <= mc; c++) {
+                    tsv += `\t${currentPovm[n * (mc + 1) + c]}`;
+                }
+                tsv += '\n';
+            }
+            
+            downloadFile(tsv, 'povm_matrix.tsv', 'text/tab-separated-values');
+        };
+
+        document.getElementById('btn-export-sim').onclick = () => {
+            if (!window.latestSimCounts || !window.latestSimAlphas) return;
+            const mc = lastParams.maxC;
+            const alphas = window.latestSimAlphas;
+            const counts = window.latestSimCounts;
+
+            let tsv = 'alpha';
+            for (let c = 0; c <= mc; c++) tsv += `\tc=${c}`;
+            tsv += '\n';
+
+            for (let i = 0; i < alphas.length; i++) {
+                tsv += alphas[i];
+                for (let c = 0; c <= mc; c++) {
+                    tsv += `\t${counts[i * (mc + 1) + c]}`;
+                }
+                tsv += '\n';
+            }
+
+            downloadFile(tsv, 'simulated_counts.tsv', 'text/tab-separated-values');
+        };
+
+        function downloadFile(content, filename, mimeType) {
+            const blob = new Blob([content], { type: mimeType });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
         function plotPovm(flat, mc, mn) {
             const z = [];
-            for(let n=0; n<=mn; n++) z.push(flat.slice(n*(mc+1), (n+1)*(mc+1)));
-            Plotly.newPlot('plot-povm', [{z: z, type: 'heatmap'}], {title: 'POVM Matrix (WASM)'});
+            for(let c=0; c<=mc; c++) {
+                const row = [];
+                for(let n=0; n<=mn; n++) {
+                    row.push(flat[n*(mc+1)+c]);
+                }
+                z.push(row);
+            }
+            Plotly.newPlot('plot-povm', [{z: z, type: 'heatmap', colorscale: 'Viridis'}], {
+                title: 'POVM Matrix (WASM)',
+                xaxis: {title: 'Input Photons (n)'},
+                yaxis: {title: 'Outcome (c)'}
+            });
         }
 
         function plotSim(alphas, counts, mc) {
