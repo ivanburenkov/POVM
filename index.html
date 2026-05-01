@@ -20,10 +20,10 @@
         <div class="sidebar">
             <h3>Configuration</h3>
             <label>Type: <select id="det-type"><option value="0">Ideal</option><option value="1">QPNR</option></select></label><br>
-            <label>Eff (η): <input type="number" id="eff" value="0.9" step="0.1"></label><br>
-            <label>Dark (pd): <input type="number" id="dark" value="0.001" step="0.001"></label><br>
-            <label>Max C: <input type="number" id="max-c" value="5"></label><br>
-            <label>Max N: <input type="number" id="max-n" value="20"></label><br>
+            <label>Efficiency (η): <input type="number" id="eff" value="0.9" step="0.1"></label><br>
+            <label>Dark counts: <input type="number" id="dark" value="0.001" step="0.001"></label><br>
+            <label>Max PNR C: <input type="number" id="max-c" value="5"></label><br>
+            <label>Max input N: <input type="number" id="max-n" value="20"></label><br>
             <button id="btn-gen" class="primary">1. Generate POVM</button>
             <hr>
             <label>Min α: <input type="number" id="min-a" value="0.1"></label><br>
@@ -32,8 +32,8 @@
             <label>Trials: <input type="number" id="trials" value="10000"></label><br>
             <button id="btn-sim" disabled>2. Simulate Experiment</button>
             <hr>
-            <button id="btn-export-povm" disabled style="background-color: #17a2b8; color: white;">Export POVM TSV</button>
-            <button id="btn-export-sim" disabled style="background-color: #17a2b8; color: white;">Export Sim Data TSV</button>
+            <button id="btn-export-povm" disabled style="background-color: #17a2b8; color: white;">Export POVM</button>
+            <button id="btn-export-sim" disabled style="background-color: #17a2b8; color: white;">Export Similated Data</button>
             <div id="log" class="log">WASM Initializing...</div>
         </div>
         <div class="main">
@@ -224,7 +224,7 @@
                 z.push(row);
             }
             Plotly.newPlot('plot-povm', [{z: z, type: 'heatmap', colorscale: 'Viridis'}], {
-                title: 'POVM Matrix (WASM)',
+                title: 'POVM Matrix',
                 xaxis: {title: 'Input Photons (n)'},
                 yaxis: {title: 'Outcome (c)'}
             });
@@ -237,8 +237,8 @@
                 for(let i=0; i<alphas.length; i++) y.push(counts[i*(mc+1)+c]);
                 traces.push({x: alphas, y: y, name: `c=${c}`, mode: 'lines+markers'});
             }
-            Plotly.newPlot('plot-sim', traces, {title: 'Simulated Counts', xaxis: {title: 'Alpha'},
-                yaxis: {title: 'Counts'}});
+            Plotly.newPlot('plot-sim', traces, {title: 'Simulated Counts', xaxis: {title: 'α'},
+                yaxis: {title: 'Frequency'}});
         }
     </script>
 </body>
