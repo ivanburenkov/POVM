@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>POVM Simulator (WASM)</title>
+    <title>POVM Simulator</title>
     <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background-color: #f4f7f6; }
@@ -15,7 +15,7 @@
     </style>
 </head>
 <body>
-    <h1>POVM Simulator <small>(WASM Engine)</small></h1>
+    <h1>POVM Simulator</h1>
     <div class="container">
         <div class="sidebar">
             <h3>Configuration</h3>
@@ -237,7 +237,8 @@
                 for(let i=0; i<alphas.length; i++) y.push(counts[i*(mc+1)+c]);
                 traces.push({x: alphas, y: y, name: `c=${c}`, mode: 'lines+markers'});
             }
-            Plotly.newPlot('plot-sim', traces, {title: 'Simulated Counts'});
+            Plotly.newPlot('plot-sim', traces, {title: 'Simulated Counts', xaxis: {title: 'Alpha'},
+                yaxis: {title: 'Counts'}});
         }
     </script>
 </body>
